@@ -1,0 +1,171 @@
+---
+title: "BUS 3320 Term Project"
+subtitle: "Credit Card Default Payment Prediction Using Multiple Linear Regression"
+author: "Riley Sweeting"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    includes:
+      in_header: "wrap-code.tex"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Credit card payment defaults pose significant harm for both banks and credit card holders. A default happens when a cardholder neglects to meet the minimum required payment on their card. This failure usually leads to the suspension of the user's card, a decrease in their credit score, and in extreme cases, legal action from the bank to recover the debt. This can be severely costly for the bank, which highlights the importance and necessity of predicting and preventing credit card defaults.
+
+## Research Question
+The goal of this project is to determine if the credit limit of credit card holders influences the probability of defaults on their credit card payments.
+
+## Hypotheses
+It is hypothesized that the credit limit of credit card holders negatively influences the probability of defaulting. In other words, as the credit limit of the card holder increases, the likelihood of them defaulting decreases. The null hypothesis states that there is either no significant relationship between the credit limit of card holders and the probability of defaulting, or that the relationship is positive.
+
+Hypotheses:
+
+  $H_0: \beta_{Limit} \geq 0$  
+  $H_a: \beta_{Limit} < 0 \\$
+
+## Dataset Description
+The dataset used is sourced from the University of California, Irvine's Machine Learning Repository, and contains 6 months of credit information of Taiwanese credit card holders. The time period spans from April 2005 to September 2005. This repository is open to the public, free of charge, and accessible to everyone. The dataset is titled "Default of Credit Card Clients", and was published in 2016.
+
+The dataset contains 30,000 samples, each with 23 features, some of which are aggregated in the analysis. All samples are free of missing values, but some samples appear to contain missing values which will be detailed later. The features used in the regression are as follows:
+
+* $\texttt{Limit}$ - The quantitative measure of the credit limit of the card holder.
+
+* $\texttt{Sex}$ - The categorical gender of the card holder.
+  * 0 $\rightarrow$ Male
+  * 1 $\rightarrow$ Female
+
+* $\texttt{Education}$ - The categorical education status of the card holder.
+  * 1 $\rightarrow$ Graduate School
+  * 2 $\rightarrow$ University
+  * 3 $\rightarrow$ Highschool
+  * 4 $\rightarrow$ None/Other
+
+* $\texttt{Marriage}$ - The categorical marriage status of the card holder.
+  * 1 $\rightarrow$ Married
+  * 2 $\rightarrow$ Single
+  * 3 $\rightarrow$ Other
+
+* $\texttt{Age}$ - The quantitative measure of the age of the card holder.
+
+* $\texttt{Average Bill}$ - The quantitative calculation of the average bill of the card holder over the 6 months.
+
+* $\texttt{Average Payment}$ - The quantitative calculation of the average monthly payment of the card holder over the 6 months.
+
+* $\texttt{Consistence}$ - The categorical representation of the monthly payment status of the card holder over the 6 months.
+  * 0 $\rightarrow$ Payed duly every month
+  * 1 $\rightarrow$ Did not pay duly every month
+
+* $\texttt{Missed Payment}$ - The categorical representation of whether the card holder failed to a payment anytime during the 6 months.
+  * 0 $\rightarrow$ Did not miss a payment
+  * 1 $\rightarrow$ Missed a payment
+
+# Data Preprocessing
+Given that the dataset contains categorical data, it is essential to correctly format and process the data so that it is properly interpreted as categorical data during regression. Failure to format the data can lead to inaccurate results. This section details the pre-processing and formatting methods used. 
+
+## Import Excel Data
+Import the Excel file containing the data from its location. Limit the number of rows to the number of samples, being 30,000. 
+```{r}
+# Open package
+library(readxl)
+
+# Import data from Excel
+df <- read_excel("C:/Users/riley/OneDrive/Documents/School/College/Semester 4/Business Stats/Assignments/Final/credit_data.xlsx", n_max = 30000)
+```
+
+## Filter Abnormal Values
+Some of the samples in the dataset have feature values outside of the defined range. For example, the categorical feature $\texttt{Education}$ ranges from 1 to 4, representing graduate, university, highschool, and other education. However, the value 0 appears in the dataset, so samples with an $\texttt{Education}$ value of 0 are removed. The same applies to the feature $\texttt{Marriage}$.
+```{r}
+# Filter and eliminate samples
+df = df[df$Education != "0", ]
+df = df[df$Marriage != "0", ]
+```
+
+## What is Factoring?
+Categorical features of the dataframe must be factored, or in other words, interpreted as nominal data. If not factored, the regression function will interpret the categorical data as quantitative data, and the results of the regression will be inaccurate. For example, if an unfactored feature $\texttt{Color}$ has values $red, blue, green$ represented by $0, 1, 2$, the regression function will interpret the values as measured numbers rather than categories.
+
+## Factor Categorical Data
+Factor the categorical features of the dataset, and if needed, change the levels of the features.
+```{r}
+# Factor categorical features so they are interpreted as nominal data
+df$Sex = factor(df$Sex, levels = c("1", "2"), labels = c("0", "1")) # Change levels to 0 and 1
+df$Education = factor(df$Education)
+df$Marriage = factor(df$Marriage)
+df$Consistence = factor(df$Consistence)
+df$Missed_Payment = factor(df$Missed_Payment)
+df$Default = factor(df$Default)
+```
+
+# Summary of Data
+In this section, we will analyze the descriptive statistics of the independent and dependent variables used in the simple and multiple logistic regressions.
+
+## Summary of Independent Credit Limit
+From the descriptive summary statistics below, we see that the distribution of credit limits is positively skewed (to the right), indicating a tendency towards lower values. 25% of card holders have a credit limit in the \$50,000 bracket, and 50% in the \$140,000 bracket. This makes sense given the context of the data, as the majority of bank users start with a lower limit, and then once the bank deems them trustworthy and responsible are they given higher limits.
+```{r}
+# Plot a histogram of credit limit data
+hist(df$Limit, breaks = 10, main = "Frequency Distribution of Credit Limits")
+
+# Descriptive summary statistics
+summary(df$Limit)
+```
+
+## Summary of Dependent Default
+From the descriptive summary statistics below, we see that close to a quarter of all card holders defaulted on a payment, 6,631 out of 29,932 to be exact (22.15%). This is higher than expected, meaning it is possible that the creators of the dataset introduced extra samples with defaults into the dataset, meaning that the proportions of the data may not reflect the true distribution.
+```{r}
+# Plot a pie chart of default data
+pie(table(df$Default), labels = c(paste("Non-Defaults", round(table(df$Default)[1] / length(df$Limit) * 100, 2), "%", sep = " "), paste("Defaults", round(table(df$Default)[2] / length(df$Limit) * 100, 2), "%", sep = " ")), main = "Proportion of Defaults")
+
+# Descriptive summary statistics
+summary(df$Default)
+```
+
+# Compute Regressions
+In this section, we will perform simple and multiple logistic regression to determine the regression coefficients of the card holder features. These coefficients will be used in hypothesis testing to evaluate the research question.
+
+## Perform Simple Logistic Regression
+The research question aims to test whether the credit limit of card holders influences the probability of defaulting. In this simple regression, we are using the feature $\texttt{Credit Limit}$ as the sole independent variable, and the feature $\texttt{Default}$ as the dependent variable. 
+```{r}
+# Open MFX Package (For Logistic Regression)
+suppressMessages(library(mfx))
+
+# Compute simple logistic regression using Logitmfx
+simple_model = logitmfx(Default ~ Limit, data = df)
+
+# Display Model
+simple_model
+```
+
+## Perform Multiple Logistic Regression
+Similar to the simple logistic model, we have $\texttt{Default}$ as the dependent variable and $\texttt{Credit Limit}$ as the main independent variable. However, we are now including other features of the dataset so we can control for these other features.
+```{r}
+# Open MFX Package (For Logistic Regression)
+suppressMessages(library(mfx))
+
+# Compute multiple logistic regression using Logitmfx
+multiple_model = logitmfx(Default ~ Limit + Sex + Education + Marriage + Age + Avg_Bill + Avg_Payment + Consistence + Missed_Payment, data = df)
+
+# Display Model
+multiple_model
+```
+
+
+# Interpret Results
+In this section, we will perform hypothesis testing on the regression coefficients of the $\texttt{Credit Limit}$ feature resulting from the simple and multiple logistic regressions. The $\texttt{logitmfx()}$ function was used to allow for easier interpretation of the categorical dependent variable $\texttt{Default}$.
+
+## Simple Regression Coefficient
+The coefficient of the quantitative independent variable $\texttt{Credit Limit}$ was determined to be $-5.5365 \times 10^{-7}$. The negative coefficient signifies a negative relationship between the credit limit of card holders and the likelihood they default on their payments. More specifically, per \$1,000 the credit limit increases, the probability of defaulting decreases by $0.00055365$ or $0.055$ percent on average. These results are statistically significant at the 0.1% significance level, meaning the p-value corresponding to the regression coefficient is less than 0.001. 
+
+## Multiple Regression Coefficient
+The coefficient of the quantitative independent variable $\texttt{Credit Limit}$ was determined to be $-4.8126 \times 10^{-7}$. The negative coefficient signifies a negative relationship between the credit limit of card holders and the likelihood they default on their payments. More specifically, per \$1,000 the credit limit increases, the probability of defaulting decreases by $0.00048126$ or $0.048$ percent on average, holding all other features constant. These results are statistically significant at the 0.1% significance level, meaning the p-value corresponding to the regression coefficient is less than 0.001.
+
+## Conclusion
+In both regression results, the p-value corresponding to the regression coefficient was less than the significance level of 0.001, making the relationship hypothesized in the alternative hypothesis highly statistically significant. Thus, we reject the null hypothesis and must accept the alternative hypothesis.
+
+The null hypothesis states that there is either no significant relationship between the credit limit of card holders and the probability of defaulting, or that the relationship is positive. In other words, the regression coefficient of the credit limit of card holders is either 0 or a positive value. Since we rejected the null hypothesis and accepted the alternative hypothesis, we accept that the coefficient is negative, and that there is a significant negative relationship between the 2 variables.
+
+The coefficient is closer to the coefficient of $\beta_{Limit} = -4.8126 \times 10^{-7}$ determined by the multiple logistic regression. The coefficient of the multiple regression is more reflective of the relationship than the simple regression, because the multiple regression takes other features into account. Thus, when we say that the results are statistically significant, we are saying that the credit limit coefficient is statistically less than the value 0 hypothesized in the null hypothesis.
+
